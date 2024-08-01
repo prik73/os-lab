@@ -1,6 +1,8 @@
 #include <stdio.h>
 
-void readMatrix(int rows, int cols, int matrix[rows][cols]) {
+#define MAX_SIZE 100
+
+void readMatrix(int rows, int cols, int matrix[MAX_SIZE][MAX_SIZE]) {
     printf("Enter the elements of the matrix:\n");
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
@@ -9,7 +11,7 @@ void readMatrix(int rows, int cols, int matrix[rows][cols]) {
     }
 }
 
-void transposeMatrix(int rows, int cols, int matrix[rows][cols], int transpose[cols][rows]) {
+void transposeMatrix(int rows, int cols, int matrix[MAX_SIZE][MAX_SIZE], int transpose[MAX_SIZE][MAX_SIZE]) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             transpose[j][i] = matrix[i][j];
@@ -17,7 +19,7 @@ void transposeMatrix(int rows, int cols, int matrix[rows][cols], int transpose[c
     }
 }
 
-void printMatrix(int rows, int cols, int matrix[rows][cols]) {
+void printMatrix(int rows, int cols, int matrix[MAX_SIZE][MAX_SIZE]) {
     for (int i = 0; i < rows; i++) {
         for (int j = 0; j < cols; j++) {
             printf("%d ", matrix[i][j]);
@@ -34,8 +36,13 @@ int main() {
     printf("Enter the number of columns: ");
     scanf("%d", &cols);
 
-    int matrix[rows][cols];
-    int transpose[cols][rows];
+    if (rows > MAX_SIZE || cols > MAX_SIZE) {
+        printf("Error: matrix size exceeds maximum allowed size of %d\n", MAX_SIZE);
+        return 1;
+    }
+
+    int matrix[MAX_SIZE][MAX_SIZE];
+    int transpose[MAX_SIZE][MAX_SIZE];
 
     readMatrix(rows, cols, matrix);
     transposeMatrix(rows, cols, matrix, transpose);
