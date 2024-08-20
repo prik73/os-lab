@@ -11,7 +11,7 @@ int main() {
 
     for (int i = 0; i < 4; i++) {
         pid = fork();
-        if (pid == 0) { // Child process
+        if (pid == 0) {     
             FILE *file;
             char buffer[BUFFER_SIZE];
 
