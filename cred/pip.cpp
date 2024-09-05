@@ -23,6 +23,7 @@ void pipeline(const char* process1, const char* process2){
     }
 }
 
+//hello from mars
 
 int main(void){
     pipeline("cat pipe.cpp", "grep hello");
