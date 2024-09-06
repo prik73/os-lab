@@ -54,6 +54,74 @@ struct cache_elements{
 
 //------------functions code---------------
 //anything can be passed in void*-- int, char, anything
+//list of function-- handle_request, thread, connectRemoteServer
+
+int connectRemoteServer(char* host_addr, int port_num){
+	int remoteSocket = socket(AF_INET, SOCK_STREAM, 0);
+	if(remoteSocket < 0){
+		printf("error in creatin your socket...\n");
+		return -1;
+	}
+
+	/*host ent stands for host entries,tip- from stack()verflow never look this up on internet always man on terminal*/
+	struct hostent* host = gethostbyname(host_addr);
+	if(host == NULL){
+		perror("no such thing exists...");
+		return -1;
+	}
+
+	struct sockaddr_in server_addr;
+	bzero((char*)&server_addr, sizeof(server_addr));
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_port = htons(port_num);
+
+	//bitcopy
+	bcopy((char &) host -> h_addr (char*)&server_addr.sin_addr.s_addr, host -> h_length);
+
+}
+
+int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
+	char *buff=  (char *)malloc(sizeof(char) * MAX_BYTES);
+
+	strcpy(buff, "GET ");
+	strcat(buff, request -> path);	
+	strcat(buff, " ");
+	strcat(buff, request -> version );
+	strcat(buff, "\r\n");
+
+	
+	size_t len = strlen(buff);
+
+	if(ParsedHeader_set(request, "Connection", "close") < 0){
+		printf("set header is not working");
+
+	}
+
+	if(ParsedHeader_get(request, "Host") == NULL){
+		if(ParsedHeader_set(request, "Host", request -> host) < 0){
+			printf("set Host header key is not working in this universe...");
+		}
+	}
+
+
+	if(ParsedRequest_unparse_headers(request, buff+ len, (size_t)MAX_BYTES-len) <0 ){
+		printf("unparse failed");
+	}
+
+	//end server, where it will send it's response, i.e. example google, facebook jo bhi
+	int server_port = 80;
+	if(request -> port != NULL){
+		//if port is 8080 overwrite it...
+		server_port = atoi(request -> port );
+
+		int remoteSocketId = connectRemoteServer(request -> host, server_port);
+	}
+
+
+}
+
+
+
 void *thread(void *socketNew){
 	sem_wait(&semaphore);
 	int p;
@@ -77,8 +145,74 @@ void *thread(void *socketNew){
 		}else{
 			break;
 		}
-	} 
+	}
 
+	//technically, ab ho ye raha hai ki, req, aayi hai hamari proxy tak... 
+	//hum search karenge, but usse pehle we will copy it
+	//not necesary to make copy, but it is good practice	
+	char *tempReq = (char *)malloc(strlen(buffer)*sizeof(buffer) + 1);
+	 
+	for(int i = 0; i < strlen(buffer); i++){
+		tempReq[i] = buffer[i];
+	}
+
+	//finding our req in cache memory... if we find... it then beautyfull, if not
+	struct cache_elements* temp = find(tempReq);
+	if(temp!= NULL){
+		int size = temp->length/sizeof(char);
+		int pos = 0;
+
+		char response[MAX_BYTES];
+		while(pos < size){
+			bzero(response, MAX_BYTES);
+			for(int i = 0; i < MAX_BYTES; i++){
+				response[i] = temp->data[i];
+				pos++;
+			}
+			send(socket, response, MAX_BYTES, 0);
+		}
+		printf("data retrieved from cache \n");
+		printf("%s\n\n", response);
+
+	}else if(bytes_send_client > 0){
+		len = strlen(buffer);
+		ParsedRequest *request = ParsedRequest_create();
+
+		//buffer me request hai...
+		if(ParsedRequest_parse(request, buffer, len) < 0){
+			printf("parsin failed\n");
+		}else{
+			bzero(buffer, MAX_BYTES);
+
+			if(!strcmp(request->method, "GET")){
+				if( request -> host && request -> path && checkHTTPversion(request -> version) == 1){
+					bytes_send_client = handle_request(socket, request, tempReq);
+
+					if(bytes_send_client == -1){
+						sendErrorMessage(socket, 500);
+					}
+				}else{
+					sendErrorMessage(socket, 500);
+				}
+			}else{
+				printf("this mode doesn't support get request\n");
+			}
+		}
+
+		ParsedRequest_destroy(request);
+
+	}else if(bytes_send_client == 0){
+		printf("client is disconnected");
+	}
+
+	shutdown(socket, SHUT_RDWR);
+	close(socket);
+	free(buffer);
+	sem_post(&semaphore);
+	sem_getvalue(&semaphore, p);
+	printf("semaphore post value is %d\n", p);
+	free(tempReq);
+	return NULL;
 }	
 
 
@@ -220,7 +354,7 @@ int main (int argc, char* argv[]){
 
 
 
-		pthread_create(&tid[i], NULL, thread_fn, (void *)&Connected_socketId[i]);
+		pthread_create(&tid[i], NULL, thread(), (void *)&Connected_socketId[i]);
 		i++;
 
 	}
