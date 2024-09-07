@@ -40,7 +40,7 @@ struct cache_elements{
 	int add_cache_element(char* data, int size, char* url);
 	void remove_cache_element();
 
-	int port_number = 8080;
+	int 	port_number = 8080;
 	int proxy_socketID;
 	pthread_t tid[MAX_CLIENT];
 	sem_t semaphore;
@@ -57,6 +57,7 @@ struct cache_elements{
 //list of function-- handle_request, thread, connectRemoteServer
 
 int connectRemoteServer(char* host_addr, int port_num){
+
 	int remoteSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if(remoteSocket < 0){
 		printf("error in creatin your socket...\n");
@@ -72,16 +73,22 @@ int connectRemoteServer(char* host_addr, int port_num){
 
 	struct sockaddr_in server_addr;
 	bzero((char*)&server_addr, sizeof(server_addr));
-	server_addr.sin_family = AF_INET;
-	server_addr.sin_port = htons(port_num);
+	server_addr.sin_family = AF_INET; // setting socket_internet family to AF_INET...
+	server_addr.sin_port = htons(port_num);  //htons -> network port me convert karega integers ko
 
 	//bitcopy
-	bcopy((char &) host -> h_addr (char*)&server_addr.sin_addr.s_addr, host -> h_length);
+	bcopy((char *) &host -> h_addr, (char*)&server_addr.sin_addr.s_addr, host-> h_length);
+	//connect three arg - socketDescriptor, add of remote server, 
+	if(connect(remoteSocket, (struct sockaddr *)&server_addr, (size_t)sizeof(server_addr)) < 0){
+		fprintf(stderr, "error in connecting to remote server.\n");
+		return -1;
+	}
+	return remoteSocket;
 
 }
 
 int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
-	char *buff=  (char *)malloc(sizeof(char) * MAX_BYTES);
+	char *buff =  (char *)malloc(sizeof(char) * MAX_BYTES);
 
 	strcpy(buff, "GET ");
 	strcat(buff, request -> path);	
@@ -113,11 +120,146 @@ int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
 	if(request -> port != NULL){
 		//if port is 8080 overwrite it...
 		server_port = atoi(request -> port );
-
-		int remoteSocketId = connectRemoteServer(request -> host, server_port);
+	}
+	int remoteSocketId = connectRemoteServer(request -> host, server_port);
+	if(remoteSocketId < 0 ){
+		return -1;
 	}
 
+	//sendin bytes to server
+	int bytes_send = send(remoteSocketId, buff, strlen(buff), 0);
+	bzero(buff, MAX_BYTES);
 
+	bytes_send = recv(remoteSocketId, buff, MAX_BYTES - 1, 0); // -1: when we receive data from server, last bit is '\0', so for aesthetics
+	char *temp_buffer = (char *)malloc(sizeof(char)*MAX_BYTES);
+
+	int temp_buffer_size = MAX_BYTES;
+	int temp_buffer_index = 0;
+
+
+	//don't go on the name, jab tak receive karte rahenge, tab tak this is > 0
+	while(bytes_send > 0){
+		bytes_send = send(ClientSocketId, buff, bytes_send, 0);
+		for(int i = 0; i < bytes_send/sizeof(bytes_send); i++){
+			temp_buffer[temp_buffer_index] = buff[i];
+			temp_buffer_index++;
+		}
+
+		temp_buffer_size += MAX_BYTES;
+		temp_buffer = (char*)realloc(temp_buffer, temp_buffer_size);
+
+		if(bytes_send < 0){
+			 perror('error in sending data to the client\n');
+			 break;
+		}
+
+		//cleaning to send  again 
+		bzero(buff, MAX_BYTES);
+		bytes_send = recv(remoteSocketId, buff, MAX_BYTES -1, 0);
+	}
+
+	// this v imp line, as in if temp buffer is of 5-6 gb and response is of 
+	// 1 gb(for example)so it will bring only till 1gb	
+	temp_buffer[temp_buffer_index] = '\0'; 
+	free(buff);
+	add_cache_element(temp_buffer, strlen(temp_buffer),tempReq);
+
+	free(temp_buffer);
+	close(remoteSocketId);
+	return 0;
+
+
+}
+
+
+
+
+
+//switch cases are from gpt/
+
+int SendErrorMessage(int socket, int status_code){
+	char str[1024];
+	char currentTime[50];
+	time_t now = time(0);
+
+	// Get current time in GMT format
+	struct tm data = *gmtime(&now);
+	strftime(currentTime, sizeof(currentTime), "%a, %d, %b, %Y, %H:%M:%S GMT", &data);
+
+	switch(status_code){
+		case 400: 
+			snprintf(str, sizeof(str), 
+				"HTTP/1.1 400 Bad Request\r\n"
+				"Date: %s\r\n"
+				"Content-Type: text/html\r\n"
+				"Content-Length: 52\r\n"
+				"\r\n"
+				"<html><body><h1>400 Bad Request</h1></body></html>\r\n", 
+				currentTime);
+			printf("Sending 400 Bad Request error\n");
+			send(socket, str, strlen(str), 0);
+			break;
+
+		case 403: 
+			snprintf(str, sizeof(str), 
+				"HTTP/1.1 403 Forbidden\r\n"
+				"Date: %s\r\n"
+				"Content-Type: text/html\r\n"
+				"Content-Length: 51\r\n"
+				"\r\n"
+				"<html><body><h1>403 Forbidden</h1></body></html>\r\n", 
+				currentTime);
+			printf("Sending 403 Forbidden error\n");
+			send(socket, str, strlen(str), 0);
+			break;
+
+		case 404: 
+			snprintf(str, sizeof(str), 
+				"HTTP/1.1 404 Not Found\r\n"
+				"Date: %s\r\n"
+				"Content-Type: text/html\r\n"
+				"Content-Length: 50\r\n"
+				"\r\n"
+				"<html><body><h1>404 Not Found</h1></body></html>\r\n", 
+				currentTime);
+			printf("Sending 404 Not Found error\n");
+			send(socket, str, strlen(str), 0);
+			break;
+
+		case 500: 
+			snprintf(str, sizeof(str), 
+				"HTTP/1.1 500 Internal Server Error\r\n"
+				"Date: %s\r\n"
+				"Content-Type: text/html\r\n"
+				"Content-Length: 58\r\n"
+				"\r\n"
+				"<html><body><h1>500 Internal Server Error</h1></body></html>\r\n", 
+				currentTime);
+			printf("Sending 500 Internal Server Error\n");
+			send(socket, str, strlen(str), 0);
+			break;
+
+		default:
+			printf("Unknown status code: %d\n", status_code);
+			break;
+	}
+
+	return 1;
+}
+
+
+int CheckHTTPversion(char* msg){
+	int version = -1;
+
+	if(strncmp(msg, "HTTP/1.1", 8) == 0){
+		version = 1;
+	}else if(strncmp(msg, "HTTP/1.0", 8) == 0){
+		version = 1;
+	}else{
+		version = -1;
+	}
+
+	return version;
 }
 
 
@@ -136,6 +278,7 @@ void *thread(void *socketNew){
 
 	char *buffer = (char*)calloc(MAX_BYTES, sizeof(char));
 	bzero(buffer, MAX_BYTES);
+	
 	bytes_send_client = recv(socket, buffer, MAX_BYTES, 0);
 
 	while(bytes_send_client > 0){
@@ -176,12 +319,14 @@ void *thread(void *socketNew){
 
 	}else if(bytes_send_client > 0){
 		len = strlen(buffer);
+
 		ParsedRequest *request = ParsedRequest_create();
 
 		//buffer me request hai...
 		if(ParsedRequest_parse(request, buffer, len) < 0){
 			printf("parsin failed\n");
 		}else{
+			
 			bzero(buffer, MAX_BYTES);
 
 			if(!strcmp(request->method, "GET")){
@@ -247,10 +392,12 @@ int main (int argc, char* argv[]){
 	struct sockaddr_in server_addr, client_addr;
 
 	//here 2nd argument is pshared value, can be(0 or 1)
-	sem_init(&semaphore,0,  MAX_CLIENT);
+	sem_init(&semaphore, 0,  MAX_CLIENT);
 	pthread_mutex_init(&lock, NULL);
 
+	
 	//condition for ... when starting the server, to ask for port numbers
+	//checking, for 2 arguments
 	if(argv == 2){
 		//atoi changes strings to integer, toh jo value cmd terminal me strings me hogi... wo number me aa jaaegi
 		port_number = atoi(argv[1]);
@@ -277,6 +424,7 @@ int main (int argc, char* argv[]){
 	//address family- ipv4 protocol, sockstream indicates tcp socket-- specifies two way connection -- handshake in layman
 	//this will store file descriptors for socket file
 	
+	//third arg, here means default protocol, '0' for sockstream is tcp, for sockdgram is UDP.
 	 proxy_socketID = socket(AF_INET, SOCK_STREAM, 0);
 	 if(proxy_socketID < 0){
 		perror("failed in creating socket.");
@@ -295,7 +443,9 @@ int main (int argc, char* argv[]){
 	bzero((char*)&server_addr, sizeof(server_addr));
 	server_addr.sin_family = AF_INET;
 	server_addr.sin_port = htons(port_number);
-	server_addr.sin_addr.s_addr = INADDR_ANY;
+	server_addr.sin_addr.s_addr = INADDR_ANY;    // specifying to connect to any type of ip addresss/ any type of tcp addresss
+
+	
 	if(bind((proxy_socketID), (struct sockaddr*)&server_addr, sizeof(server_addr))< 0){
 		perror("port binding failed\n");
 	}else{
