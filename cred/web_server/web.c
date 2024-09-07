@@ -1,4 +1,5 @@
-#include "proxy_parse.h";
+
+#include "proxy_parse.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,8 @@
 
 #define MAX_CLIENT 10 
 #define MAX_BYTES 4096
+#define MAX_ELEMENT_SIZE 10*(1<<10)
+#define MAX_SIZE 200*(1<<20) //cache ka total size  200 into 2 to the power 20
 
 typedef struct cache_elements cache_elements;
 
@@ -57,7 +60,7 @@ struct cache_elements{
 //list of function-- handle_request, thread, connectRemoteServer
 
 int connectRemoteServer(char* host_addr, int port_num){
-
+	/**/
 	int remoteSocket = socket(AF_INET, SOCK_STREAM, 0);
 	if(remoteSocket < 0){
 		printf("error in creatin your socket...\n");
@@ -77,7 +80,9 @@ int connectRemoteServer(char* host_addr, int port_num){
 	server_addr.sin_port = htons(port_num);  //htons -> network port me convert karega integers ko
 
 	//bitcopy
-	bcopy((char *) &host -> h_addr, (char*)&server_addr.sin_addr.s_addr, host-> h_length);
+	bcopy((char *)host -> h_addr, (char*)&server_addr.sin_addr.s_addr, host-> h_length);
+
+
 	//connect three arg - socketDescriptor, add of remote server, 
 	if(connect(remoteSocket, (struct sockaddr *)&server_addr, (size_t)sizeof(server_addr)) < 0){
 		fprintf(stderr, "error in connecting to remote server.\n");
@@ -85,11 +90,13 @@ int connectRemoteServer(char* host_addr, int port_num){
 	}
 	return remoteSocket;
 
+	
+
 }
 
-int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
-	char *buff =  (char *)malloc(sizeof(char) * MAX_BYTES);
-
+int handle_request(int ClientSocketId, struct ParsedRequest *request, char* tempReq){
+	
+	char *buff =  (char *)malloc(sizeof(char)*MAX_BYTES);
 	strcpy(buff, "GET ");
 	strcat(buff, request -> path);	
 	strcat(buff, " ");
@@ -132,7 +139,6 @@ int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
 
 	bytes_send = recv(remoteSocketId, buff, MAX_BYTES - 1, 0); // -1: when we receive data from server, last bit is '\0', so for aesthetics
 	char *temp_buffer = (char *)malloc(sizeof(char)*MAX_BYTES);
-
 	int temp_buffer_size = MAX_BYTES;
 	int temp_buffer_index = 0;
 
@@ -140,7 +146,7 @@ int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
 	//don't go on the name, jab tak receive karte rahenge, tab tak this is > 0
 	while(bytes_send > 0){
 		bytes_send = send(ClientSocketId, buff, bytes_send, 0);
-		for(int i = 0; i < bytes_send/sizeof(bytes_send); i++){
+		for(size_t i = 0; i < (size_t)bytes_send/sizeof(char); i++){
 			temp_buffer[temp_buffer_index] = buff[i];
 			temp_buffer_index++;
 		}
@@ -149,7 +155,7 @@ int handle_request(int ClientSocketId, ParsedRequest *request, char* tempReq){
 		temp_buffer = (char*)realloc(temp_buffer, temp_buffer_size);
 
 		if(bytes_send < 0){
-			 perror('error in sending data to the client\n');
+			 perror("error in sending data to the client\n");
 			 break;
 		}
 
@@ -241,7 +247,7 @@ int SendErrorMessage(int socket, int status_code){
 
 		default:
 			printf("Unknown status code: %d\n", status_code);
-			break;
+			return -1;
 	}
 
 	return 1;
@@ -267,8 +273,8 @@ int CheckHTTPversion(char* msg){
 void *thread(void *socketNew){
 	sem_wait(&semaphore);
 	int p;
-	sem_getvalue(&semaphore, p);
-	printf('semaphore value is: %d\n', p);
+	sem_getvalue(&semaphore, &p);
+	printf("semaphore value: %d\n", p);
 
 	//jo socket iss function me aaya hai, usko store karega
 	int *t = (int*) socketNew;
@@ -295,7 +301,7 @@ void *thread(void *socketNew){
 	//not necesary to make copy, but it is good practice	
 	char *tempReq = (char *)malloc(strlen(buffer)*sizeof(buffer) + 1);
 	 
-	for(int i = 0; i < strlen(buffer); i++){
+	for(size_t i = 0; i < strlen(buffer); i++){
 		tempReq[i] = buffer[i];
 	}
 
@@ -320,7 +326,8 @@ void *thread(void *socketNew){
 	}else if(bytes_send_client > 0){
 		len = strlen(buffer);
 
-		ParsedRequest *request = ParsedRequest_create();
+		//ignore this error in vscode
+		struct ParsedRequest *request = ParsedRequest_create();
 
 		//buffer me request hai...
 		if(ParsedRequest_parse(request, buffer, len) < 0){
@@ -330,14 +337,14 @@ void *thread(void *socketNew){
 			bzero(buffer, MAX_BYTES);
 
 			if(!strcmp(request->method, "GET")){
-				if( request -> host && request -> path && checkHTTPversion(request -> version) == 1){
+				if( request -> host && request -> path && CheckHTTPversion(request -> version) == 1){
 					bytes_send_client = handle_request(socket, request, tempReq);
 
 					if(bytes_send_client == -1){
-						sendErrorMessage(socket, 500);
+						SendErrorMessage(socket, 500);
 					}
 				}else{
-					sendErrorMessage(socket, 500);
+					SendErrorMessage(socket, 500);
 				}
 			}else{
 				printf("this mode doesn't support get request\n");
@@ -346,6 +353,8 @@ void *thread(void *socketNew){
 
 		ParsedRequest_destroy(request);
 
+	}else if(bytes_send_client < 0){
+		printf("error in recevin from client\n");
 	}else if(bytes_send_client == 0){
 		printf("client is disconnected");
 	}
@@ -354,7 +363,7 @@ void *thread(void *socketNew){
 	close(socket);
 	free(buffer);
 	sem_post(&semaphore);
-	sem_getvalue(&semaphore, p);
+	sem_getvalue(&semaphore, &p);
 	printf("semaphore post value is %d\n", p);
 	free(tempReq);
 	return NULL;
@@ -363,17 +372,7 @@ void *thread(void *socketNew){
 
 
 
-
-
-
-
-
-
-
-
-
-
-
+/*--------------------main ----------------------------------------*/
 
 
 int main (int argc, char* argv[]){
@@ -398,7 +397,7 @@ int main (int argc, char* argv[]){
 	
 	//condition for ... when starting the server, to ask for port numbers
 	//checking, for 2 arguments
-	if(argv == 2){
+	if(argc == 2){
 		//atoi changes strings to integer, toh jo value cmd terminal me strings me hogi... wo number me aa jaaegi
 		port_number = atoi(argv[1]);
 	}else{
@@ -430,13 +429,13 @@ int main (int argc, char* argv[]){
 		perror("failed in creating socket.");
 		exit(1);
 	 }else{
-		printf('socket created...\n');
+		printf("socket created...\n");
 	 }
 
 	 //if socket created successfully, we will reuse socket.
 		int reuse = 1;
 		if(setsockopt(proxy_socketID, SOL_SOCKET, SO_REUSEADDR, (const char*)&reuse, sizeof(reuse))){
-			perror('setSockOpt failed miserably\n');
+			perror("setSockOpt failed miserably\n");
 		}
 		
 	//cleaning the variables and structures, as in C, by default compiler gives garbage value
@@ -504,7 +503,7 @@ int main (int argc, char* argv[]){
 
 
 
-		pthread_create(&tid[i], NULL, thread(), (void *)&Connected_socketId[i]);
+		pthread_create(&tid[i], NULL, thread, (void *)&Connected_socketId[i]);
 		i++;
 
 	}
@@ -512,4 +511,108 @@ int main (int argc, char* argv[]){
 	close(proxy_socketID);
 	return 0;
 
+}
+
+
+//cache functions
+cache_elements *find(char* url){
+	cache_elements *site = NULL;
+	int temp_lock_value = pthread_mutex_lock(&lock);
+	printf("remove cache lock acquired: %d ", temp_lock_value);
+
+	if(head != NULL){
+		site = head;
+		while(site!=NULL){
+			if(!strcmp(site -> url, url)){
+				printf("LRU time track before: %ld", site->lru_time_track);
+				printf("\n...url found...\n");
+
+				//setting the just added url to be least used value i.e. zero:)
+				site -> lru_time_track = time(NULL);
+				printf("LRU time tracked after %ld", site -> lru_time_track);
+				break;
+			} 
+			site = site -> next;
+		}
+	}else{
+		printf("url not found");
+	}
+
+	temp_lock_value = pthread_mutex_unlock(&lock);
+	printf("lock is removed\n");
+	return(site);
+	 
+}
+
+void remove_cache_element(){
+	//simple LinkedL removal...
+	cache_elements *p;
+	cache_elements *q;
+	cache_elements *temp;
+
+	int temp_lock_value = pthread_mutex_lock(&lock);
+	printf("lock is acquired");
+
+	if(head!= NULL){
+		for(q=head, p = head, temp=head; q != NULL; q = q -> next){
+			if(((q -> next) -> lru_time_track) < (temp -> lru_time_track)){
+				temp = q -> next;
+				p = q;
+				//q toh next ho hee jaega as 3rd condition of for loop.
+			}
+
+			if(temp == head){
+				head = head -> next;
+			}else{
+				p -> next = temp->next;
+			}
+		}
+		cache_size = cache_size - (temp ->length)-sizeof(cache_elements) - strlen(temp -> url) - 1;
+
+		free(temp -> url);
+		free(temp -> data);
+		free(temp);
+	}
+
+	temp_lock_value = pthread_mutex_unlock(&lock);
+	printf("remove cache Lock\n");
+	  
+}
+
+int add_cache_element(char *data, int size, char *url){
+	int temp_lock_val = pthread_mutex_lock(&lock);
+	printf("add cache lock acquired %d\n", temp_lock_val);
+
+	int element_size = size + 1 + strlen(url) + sizeof(cache_elements);
+
+	if(element_size < MAX_ELEMENT_SIZE){
+		temp_lock_val = pthread_mutex_unlock(&lock);
+		printf("add cache lock is unlocked\n");
+		return 0;
+	}else{
+		while(cache_size + element_size > MAX_SIZE){
+			remove_cache_element();
+		}
+
+		cache_elements * element = (cache_elements *)malloc(sizeof(cache_elements));
+		element->data = (char*)malloc(size+1);
+
+		strcpy(element -> data, data);
+		element -> url = (char*)malloc(1 + (strlen(url)* sizeof(char)));
+
+		strcpy(element -> url, url);
+
+		element ->lru_time_track = time(NULL);
+		element -> next = head;
+		element -> length = size;
+		head = element;
+		cache_size += element_size;
+		temp_lock_val = pthread_mutex_unlock(&lock);
+
+		printf("add cache unlocked\n");
+		return 1;
+
+	}
+
+	return 0;
 }
