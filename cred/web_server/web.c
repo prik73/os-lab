@@ -15,6 +15,8 @@
 #include <errno.h>
 #include<pthread.h>
 #include<semaphore.h> //semaphores for process sync, advanced locking features
+#include<netdb.h>
+
 
 #define MAX_CLIENT 10 
 #define MAX_BYTES 4096
@@ -107,19 +109,19 @@ int handle_request(int ClientSocketId, struct ParsedRequest *request, char* temp
 	size_t len = strlen(buff);
 
 	if(ParsedHeader_set(request, "Connection", "close") < 0){
-		printf("set header is not working");
+		printf("set header is not working\n");
 
 	}
 
 	if(ParsedHeader_get(request, "Host") == NULL){
 		if(ParsedHeader_set(request, "Host", request -> host) < 0){
-			printf("set Host header key is not working in this universe...");
+			printf("set Host header key is not working in this universe...\n");
 		}
 	}
 
 
 	if(ParsedRequest_unparse_headers(request, buff+ len, (size_t)MAX_BYTES-len) <0 ){
-		printf("unparse failed");
+		printf("unparse failed\n");
 	}
 
 	//end server, where it will send it's response, i.e. example google, facebook jo bhi
@@ -356,7 +358,7 @@ void *thread(void *socketNew){
 	}else if(bytes_send_client < 0){
 		printf("error in recevin from client\n");
 	}else if(bytes_send_client == 0){
-		printf("client is disconnected");
+		printf("client is disconnected\n");
 	}
 
 	shutdown(socket, SHUT_RDWR);
@@ -401,11 +403,11 @@ int main (int argc, char* argv[]){
 		//atoi changes strings to integer, toh jo value cmd terminal me strings me hogi... wo number me aa jaaegi
 		port_number = atoi(argv[1]);
 	}else{
-		printf("give the port number as argument");
+		printf("give the port number as argument\n");
 		exit(1);
 	}
 
-	printf("starting proxy server @ port: %d", port_number);
+	printf("starting proxy server @ port: %d \n", port_number);
 
 
 
@@ -448,7 +450,7 @@ int main (int argc, char* argv[]){
 	if(bind((proxy_socketID), (struct sockaddr*)&server_addr, sizeof(server_addr))< 0){
 		perror("port binding failed\n");
 	}else{
-		printf("port binded successfully...\n port available on %d", port_number);
+		printf("port binded successfully...\nport available on %d \n", port_number);
 	}
 
 	int listen_status = listen(proxy_socketID, MAX_CLIENT);
@@ -499,7 +501,7 @@ int main (int argc, char* argv[]){
 
 		char str[INET_ADDRSTRLEN];
 		inet_ntop(AF_INET, &ip_addr, str, INET_ADDRSTRLEN);
-		printf("client is connected to port no %d and ip adress is: %s", ntohs(client_addr.sin_port), str);
+		printf("\n---client is connected to port no %d and ip adress is: %s \n", ntohs(client_addr.sin_port), str);
 
 
 
@@ -518,28 +520,28 @@ int main (int argc, char* argv[]){
 cache_elements *find(char* url){
 	cache_elements *site = NULL;
 	int temp_lock_value = pthread_mutex_lock(&lock);
-	printf("remove cache lock acquired: %d ", temp_lock_value);
+	printf("remove cache lock acquired: %d \n", temp_lock_value);
 
 	if(head != NULL){
 		site = head;
 		while(site!=NULL){
 			if(!strcmp(site -> url, url)){
-				printf("LRU time track before: %ld", site->lru_time_track);
+				printf("LRU time track before: %ld \n", site->lru_time_track);
 				printf("\n...url found...\n");
 
 				//setting the just added url to be least used value i.e. zero:)
 				site -> lru_time_track = time(NULL);
-				printf("LRU time tracked after %ld", site -> lru_time_track);
+				printf("LRU time tracked after %ld \n", site -> lru_time_track);
 				break;
 			} 
 			site = site -> next;
 		}
 	}else{
-		printf("url not found");
+		printf("url not found \n");
 	}
 
 	temp_lock_value = pthread_mutex_unlock(&lock);
-	printf("lock is removed\n");
+	printf("lock is removed %d\n", temp_lock_value);
 	return(site);
 	 
 }
@@ -551,7 +553,7 @@ void remove_cache_element(){
 	cache_elements *temp;
 
 	int temp_lock_value = pthread_mutex_lock(&lock);
-	printf("lock is acquired");
+	printf("remove cache lock is acquired %d\n", temp_lock_value);
 
 	if(head!= NULL){
 		for(q=head, p = head, temp=head; q != NULL; q = q -> next){
@@ -575,7 +577,7 @@ void remove_cache_element(){
 	}
 
 	temp_lock_value = pthread_mutex_unlock(&lock);
-	printf("remove cache Lock\n");
+	printf("remove cache Lock unlocked %d\n", temp_lock_value);
 	  
 }
 
