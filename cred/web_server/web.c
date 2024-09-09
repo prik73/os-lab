@@ -587,7 +587,7 @@ int add_cache_element(char *data, int size, char *url){
 
 	int element_size = size + 1 + strlen(url) + sizeof(cache_elements);
 
-	if(element_size < MAX_ELEMENT_SIZE){
+	if(element_size > MAX_ELEMENT_SIZE){
 		temp_lock_val = pthread_mutex_unlock(&lock);
 		printf("add cache lock is unlocked\n");
 		return 0;
