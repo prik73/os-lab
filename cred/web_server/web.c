@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <string.h>
 #include <sys/types.h> //Defines various data types used in system calls.
 #include <sys/socket.h>
 #include <netinet/in.h> //Defines Internet address family and structures for sockets.
