@@ -3,14 +3,21 @@
 #include<atomic>
 
 int main(void){
-    // int counter = 0;
-    std::atomic<int> counter = 0;
+    int counter = 0;
+    // std::atomic<int> counter = 0;
 
     auto work = [&counter](){
-        for(int i = 0; i< 10000; i++){
+        for(int i = 0; i < 1000000; i++){
             counter += 1;
+            std::cout << counter << std::endl;
         }
     };
+//    auto work = [&counter](){
+//     for(int i = 0; i < 10000; i++){
+//         counter =+ 1;   
+//     }
+    
+//    };
 
     std::thread t1(work);
     std::thread t2(work);
