@@ -7,11 +7,11 @@ class thread_object{
     public:
         void operator()(int& x){
             for(int i = 0; i < 1000000; ++i){
-                while(lock != 0){   
-                    lock = 1;
-                    x += 1;
-                    lock = 0;
-                }
+                while(lock != 0);  
+                lock = 1;
+                x += 1;
+                // printf("x ki value: %i\n", x);
+                lock = 0;
             }
         }
 };
@@ -27,5 +27,6 @@ int main(void){
     tt.join();
 
     std::cout << "final x kii valiue: " << x << std::endl;
+    return 0;
 
 }

@@ -26,7 +26,7 @@ class thread2{
     public:
      void non_critical_section(){
         int a  = 0;
-        while (++a < 1000000000);
+        while (++a < 1000 );
      }
      void operator()(int& x){
         while(true){
